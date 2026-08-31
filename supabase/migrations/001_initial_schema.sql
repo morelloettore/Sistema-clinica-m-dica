@@ -147,7 +147,7 @@ CREATE UNIQUE INDEX idx_patient_health_plan_active
 CREATE TABLE schedules (
     id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     doctor_id       UUID NOT NULL REFERENCES doctors(id) ON DELETE CASCADE,
-    clinic_id       UUID NOT NULL REFERENCES clinics(id) ON DELETE CASCADE,
+    clinic_id       UUID NOT NULL REFERENCES clinics(id) ON DELETE RESTRICT,
     date            DATE NOT NULL,
     start_time      TIME NOT NULL,
     end_time        TIME NOT NULL,
@@ -159,6 +159,11 @@ CREATE TABLE schedules (
     CONSTRAINT schedules_available_check CHECK (available_slots <= max_slots)
 );
 
+CREATE OR REPLACE FUNCTION schedule_to_ts(d DATE, t TIME)
+RETURNS TIMESTAMP IMMUTABLE PARALLEL SAFE AS $$
+    SELECT (((d::text || ' ') || t::text)::timestamp);
+$$ LANGUAGE sql STRICT;
+
 ALTER TABLE schedules
     ADD CONSTRAINT schedules_no_overlap
     EXCLUDE USING gist (
@@ -166,8 +171,8 @@ ALTER TABLE schedules
         clinic_id WITH =,
         date WITH =,
         tsrange(
-            (date || ' ' || start_time)::timestamp,
-            (date || ' ' || end_time)::timestamp
+            schedule_to_ts(date, start_time),
+            schedule_to_ts(date, end_time)
         ) WITH &&
     ) WHERE (is_active = true);
 
@@ -354,7 +359,7 @@ CREATE OR REPLACE FUNCTION prevent_profile_privilege_change()
 RETURNS TRIGGER AS $$
 BEGIN
     -- Only admins can change role or is_active
-    IF auth.user_role() <> 'admin' THEN
+    IF public.user_role() <> 'admin' THEN
         IF NEW.role IS DISTINCT FROM OLD.role THEN
             RAISE EXCEPTION 'Only administrators can change user roles';
         END IF;
@@ -454,7 +459,7 @@ CREATE TRIGGER validate_doctor_profile_trigger
 CREATE OR REPLACE FUNCTION prevent_doctor_identity_change()
 RETURNS TRIGGER AS $$
 BEGIN
-    IF NOT auth.user_role() IN ('employee', 'admin') THEN
+    IF NOT public.user_role() IN ('employee', 'admin') THEN
         IF NEW.crm IS DISTINCT FROM OLD.crm THEN
             RAISE EXCEPTION 'Only employees or administrators can change the CRM';
         END IF;
@@ -562,17 +567,17 @@ ALTER TABLE medical_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
 
 -- 6.1 Helper functions for RLS
-CREATE OR REPLACE FUNCTION auth.user_role()
+CREATE OR REPLACE FUNCTION public.user_role()
 RETURNS user_role AS $$
     SELECT role FROM profiles WHERE id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
-CREATE OR REPLACE FUNCTION auth.user_patient_id()
+CREATE OR REPLACE FUNCTION public.user_patient_id()
 RETURNS UUID AS $$
     SELECT id FROM patients WHERE profile_id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
-CREATE OR REPLACE FUNCTION auth.user_doctor_id()
+CREATE OR REPLACE FUNCTION public.user_doctor_id()
 RETURNS UUID AS $$
     SELECT id FROM doctors WHERE profile_id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
@@ -584,7 +589,7 @@ CREATE POLICY "profiles_select_own"
 
 CREATE POLICY "profiles_select_employee_admin"
     ON profiles FOR SELECT
-    USING (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "profiles_update_own"
     ON profiles FOR UPDATE
@@ -593,18 +598,18 @@ CREATE POLICY "profiles_update_own"
 
 CREATE POLICY "profiles_update_employee"
     ON profiles FOR UPDATE
-    USING (auth.user_role() = 'employee')
-    WITH CHECK (auth.user_role() = 'employee');
+    USING (public.user_role() = 'employee')
+    WITH CHECK (public.user_role() = 'employee');
 
 CREATE POLICY "profiles_update_admin"
     ON profiles FOR UPDATE
-    USING (auth.user_role() = 'admin')
-    WITH CHECK (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin')
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "profiles_delete_admin"
     ON profiles FOR DELETE
     USING (
-        auth.user_role() = 'admin'
+        public.user_role() = 'admin'
         AND id != auth.uid()
     );
 
@@ -615,15 +620,15 @@ CREATE POLICY "patients_select_own"
 
 CREATE POLICY "patients_select_employee_admin"
     ON patients FOR SELECT
-    USING (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "patients_select_doctor_own"
     ON patients FOR SELECT
     USING (
-        auth.user_role() = 'doctor'
+        public.user_role() = 'doctor'
         AND id IN (
             SELECT patient_id FROM appointments
-            WHERE doctor_id = auth.user_doctor_id()
+            WHERE doctor_id = public.user_doctor_id()
         )
     );
 
@@ -634,16 +639,16 @@ CREATE POLICY "patients_update_own"
 
 CREATE POLICY "patients_update_employee_admin"
     ON patients FOR UPDATE
-    USING (auth.user_role() IN ('employee', 'admin'))
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'))
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "patients_insert_employee_admin"
     ON patients FOR INSERT
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "patients_delete_admin"
     ON patients FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.4 Doctors policies
 CREATE POLICY "doctors_select_all"
@@ -652,7 +657,7 @@ CREATE POLICY "doctors_select_all"
 
 CREATE POLICY "doctors_insert_admin"
     ON doctors FOR INSERT
-    WITH CHECK (auth.user_role() = 'admin');
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "doctors_update_own"
     ON doctors FOR UPDATE
@@ -661,17 +666,17 @@ CREATE POLICY "doctors_update_own"
 
 CREATE POLICY "doctors_update_admin"
     ON doctors FOR UPDATE
-    USING (auth.user_role() = 'admin')
-    WITH CHECK (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin')
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "doctors_update_employee"
     ON doctors FOR UPDATE
-    USING (auth.user_role() = 'employee')
-    WITH CHECK (auth.user_role() = 'employee');
+    USING (public.user_role() = 'employee')
+    WITH CHECK (public.user_role() = 'employee');
 
 CREATE POLICY "doctors_delete_admin"
     ON doctors FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.5 Specialties policies
 CREATE POLICY "specialties_select_all"
@@ -680,16 +685,16 @@ CREATE POLICY "specialties_select_all"
 
 CREATE POLICY "specialties_insert_admin"
     ON specialties FOR INSERT
-    WITH CHECK (auth.user_role() = 'admin');
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "specialties_update_admin"
     ON specialties FOR UPDATE
-    USING (auth.user_role() = 'admin')
-    WITH CHECK (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin')
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "specialties_delete_admin"
     ON specialties FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.6 Clinics policies
 CREATE POLICY "clinics_select_all"
@@ -698,16 +703,16 @@ CREATE POLICY "clinics_select_all"
 
 CREATE POLICY "clinics_insert_admin"
     ON clinics FOR INSERT
-    WITH CHECK (auth.user_role() = 'admin');
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "clinics_update_admin"
     ON clinics FOR UPDATE
-    USING (auth.user_role() = 'admin')
-    WITH CHECK (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin')
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "clinics_delete_admin"
     ON clinics FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.7 Health plans policies
 CREATE POLICY "health_plans_select_all"
@@ -716,16 +721,16 @@ CREATE POLICY "health_plans_select_all"
 
 CREATE POLICY "health_plans_insert_employee_admin"
     ON health_plans FOR INSERT
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "health_plans_update_employee_admin"
     ON health_plans FOR UPDATE
-    USING (auth.user_role() IN ('employee', 'admin'))
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'))
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "health_plans_delete_admin"
     ON health_plans FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.8 Patient health plans policies
 CREATE POLICY "patient_health_plans_select_own"
@@ -738,20 +743,20 @@ CREATE POLICY "patient_health_plans_select_own"
 
 CREATE POLICY "patient_health_plans_select_employee_admin"
     ON patient_health_plans FOR SELECT
-    USING (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "patient_health_plans_insert_employee_admin"
     ON patient_health_plans FOR INSERT
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "patient_health_plans_update_employee_admin"
     ON patient_health_plans FOR UPDATE
-    USING (auth.user_role() IN ('employee', 'admin'))
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'))
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "patient_health_plans_delete_employee_admin"
     ON patient_health_plans FOR DELETE
-    USING (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'));
 
 -- 6.9 Doctor specialties policies
 CREATE POLICY "doctor_specialties_select_all"
@@ -760,11 +765,11 @@ CREATE POLICY "doctor_specialties_select_all"
 
 CREATE POLICY "doctor_specialties_insert_admin"
     ON doctor_specialties FOR INSERT
-    WITH CHECK (auth.user_role() = 'admin');
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "doctor_specialties_delete_admin"
     ON doctor_specialties FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.10 Doctor clinics policies
 CREATE POLICY "doctor_clinics_select_all"
@@ -773,11 +778,11 @@ CREATE POLICY "doctor_clinics_select_all"
 
 CREATE POLICY "doctor_clinics_insert_admin"
     ON doctor_clinics FOR INSERT
-    WITH CHECK (auth.user_role() = 'admin');
+    WITH CHECK (public.user_role() = 'admin');
 
 CREATE POLICY "doctor_clinics_delete_admin"
     ON doctor_clinics FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.11 Schedules policies
 CREATE POLICY "schedules_select_all"
@@ -786,16 +791,16 @@ CREATE POLICY "schedules_select_all"
 
 CREATE POLICY "schedules_insert_employee_admin"
     ON schedules FOR INSERT
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "schedules_update_employee_admin"
     ON schedules FOR UPDATE
-    USING (auth.user_role() IN ('employee', 'admin'))
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'))
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "schedules_delete_employee_admin"
     ON schedules FOR DELETE
-    USING (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'));
 
 -- 6.12 Appointments policies
 CREATE POLICY "appointments_select_own"
@@ -816,7 +821,7 @@ CREATE POLICY "appointments_select_doctor"
 
 CREATE POLICY "appointments_select_employee_admin"
     ON appointments FOR SELECT
-    USING (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "appointments_insert_own"
     ON appointments FOR INSERT
@@ -824,13 +829,13 @@ CREATE POLICY "appointments_insert_own"
         patient_id IN (
             SELECT id FROM patients WHERE profile_id = auth.uid()
         )
-        AND auth.user_role() = 'patient'
+        AND public.user_role() = 'patient'
     );
 
 CREATE POLICY "appointments_insert_employee"
     ON appointments FOR INSERT
     WITH CHECK (
-        auth.user_role() = 'employee'
+        public.user_role() = 'employee'
         AND patient_id IN (SELECT id FROM patients)
     );
 
@@ -862,12 +867,12 @@ CREATE POLICY "appointments_update_doctor"
 
 CREATE POLICY "appointments_update_employee_admin"
     ON appointments FOR UPDATE
-    USING (auth.user_role() IN ('employee', 'admin'))
-    WITH CHECK (auth.user_role() IN ('employee', 'admin'));
+    USING (public.user_role() IN ('employee', 'admin'))
+    WITH CHECK (public.user_role() IN ('employee', 'admin'));
 
 CREATE POLICY "appointments_delete_admin"
     ON appointments FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.13 Medical records policies
 CREATE POLICY "medical_records_select_own"
@@ -899,14 +904,14 @@ CREATE POLICY "medical_records_select_employee_admin"
     ON medical_records FOR SELECT
     USING (
         is_deleted = false
-        AND auth.user_role() IN ('employee', 'admin')
+        AND public.user_role() IN ('employee', 'admin')
     );
 
 CREATE POLICY "medical_records_insert_doctor"
     ON medical_records FOR INSERT
     WITH CHECK (
-        auth.user_role() = 'doctor'
-        AND doctor_id = auth.user_doctor_id()
+        public.user_role() = 'doctor'
+        AND doctor_id = public.user_doctor_id()
     );
 
 CREATE POLICY "medical_records_update_doctor"
@@ -924,12 +929,12 @@ CREATE POLICY "medical_records_update_doctor"
 
 CREATE POLICY "medical_records_delete_admin"
     ON medical_records FOR DELETE
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- 6.14 Audit logs policies
 CREATE POLICY "audit_logs_select_admin"
     ON audit_logs FOR SELECT
-    USING (auth.user_role() = 'admin');
+    USING (public.user_role() = 'admin');
 
 -- =============================================================================
 -- 7. SEED DATA (Commented out — run via supabase db seed)
