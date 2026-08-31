@@ -1,0 +1,7 @@
+export * from './auth.schema'
+export * from './patient.schema'
+export * from './doctor.schema'
+export * from './appointment.schema'
+export * from './medical-record.schema'
+export * from './schedule.schema'
+export * from './health-plan.schema'

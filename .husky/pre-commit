@@ -1,0 +1,7 @@
+pnpm lint-staged
+
+# Block commits containing potential secrets
+if git diff --cached --diff-filter=ACM | grep -E "service_role|SUPABASE_SERVICE_ROLE|sk_|pk_|password\s*=\s*['\"]" --quiet 2>/dev/null; then
+  echo "ERROR: Potential secrets detected in staged changes. Aborting commit."
+  exit 1
+fi
