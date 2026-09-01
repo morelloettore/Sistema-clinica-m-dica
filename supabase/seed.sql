@@ -60,7 +60,7 @@ INSERT INTO auth.users (
      '{"provider":"email","providers":["email"]}'::jsonb,
      '{"name":"José Paciente","cpf":"44444444444","phone":"11999999999","role":"patient"}'::jsonb,
      now(), now(), '', '', '', '')
-ON CONFLICT (email) DO UPDATE SET
+ON CONFLICT (email) WHERE is_sso_user = false DO UPDATE SET
     encrypted_password = EXCLUDED.encrypted_password,
     instance_id = EXCLUDED.instance_id,
     raw_user_meta_data = EXCLUDED.raw_user_meta_data,
@@ -82,28 +82,30 @@ WHERE email IN (
 ON CONFLICT (id) DO NOTHING;
 
 -- Link the demo patient to a patients row.
-INSERT INTO public.patients (profile_id, date_of_birth, gender, phone)
-SELECT id, '1990-01-01'::date, 'other', raw_user_meta_data->>'phone'
+INSERT INTO public.patients (profile_id, date_of_birth, gender, address, city, state, zip_code, blood_type, allergies)
+SELECT id, '1990-01-01'::date, 'other'::public.gender,
+       'Rua Demo, 100', 'São Paulo', 'SP', '00000000',
+       'O+'::public.blood_type, NULL
 FROM auth.users
 WHERE email = 'patient@clinica.local'
 ON CONFLICT (profile_id) DO NOTHING;
 
 -- Link the demo doctor to a doctors row (profile must be role='doctor').
-INSERT INTO public.doctors (profile_id, crm, specialty_id)
-SELECT id, raw_user_meta_data->>'crm', NULL
+INSERT INTO public.doctors (profile_id, crm, bio, consultation_price)
+SELECT id, raw_user_meta_data->>'crm', 'Médico de demonstração', 250.00
 FROM auth.users
 WHERE email = 'doctor@clinica.local'
 ON CONFLICT (profile_id) DO NOTHING;
 
 -- Demo clinic + specialty + schedule + health plan.
-INSERT INTO public.clinics (name, cnpj, address, phone, email)
-VALUES ('Clínica Demo', '00000000000100', 'Rua Demo, 100', '11000000000', 'demo@clinica.local')
-ON CONFLICT (cnpj) DO NOTHING;
+INSERT INTO public.clinics (name, address, phone)
+SELECT 'Clínica Demo', 'Rua Demo, 100', '11000000000'
+WHERE NOT EXISTS (SELECT 1 FROM public.clinics WHERE name = 'Clínica Demo');
 
 INSERT INTO public.specialties (name, description)
 VALUES ('Clínica Geral', 'Atendimento médico geral')
 ON CONFLICT (name) DO NOTHING;
 
-INSERT INTO public.health_plans (name, code, coverage)
-VALUES ('Plano Demo', 'DEMO-001', 100.0)
-ON CONFLICT (code) DO NOTHING;
+INSERT INTO public.health_plans (name, description, coverage_percentage, monthly_price)
+SELECT 'Plano Demo', 'Plano de demonstração', 100.00, 0.00
+WHERE NOT EXISTS (SELECT 1 FROM public.health_plans WHERE name = 'Plano Demo');

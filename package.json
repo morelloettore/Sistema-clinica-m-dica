@@ -16,7 +16,13 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "prepare": "husky",
-    "lint-staged": "lint-staged"
+    "lint-staged": "lint-staged",
+    "up:start": "powershell -ExecutionPolicy Bypass -File scripts/start-all.ps1",
+    "up:backend": "powershell -ExecutionPolicy Bypass -File scripts/start-backend.ps1",
+    "up:frontend": "powershell -ExecutionPolicy Bypass -File scripts/start-frontend.ps1",
+    "up:check": "powershell -ExecutionPolicy Bypass -File scripts/check.ps1",
+    "up:reset": "powershell -ExecutionPolicy Bypass -File scripts/reset-db.ps1",
+    "up:stop": "powershell -ExecutionPolicy Bypass -File scripts/stop-all.ps1"
   },
   "devDependencies": {
     "husky": "^9.1.7",
