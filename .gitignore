@@ -9,3 +9,5 @@ dist/
 supabase/.temp/
 coverage/
 .vite/
+*.tsbuildinfo
+supabase/.branches/
