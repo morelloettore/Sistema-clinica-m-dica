@@ -22,7 +22,8 @@
     "up:frontend": "powershell -ExecutionPolicy Bypass -File scripts/start-frontend.ps1",
     "up:check": "powershell -ExecutionPolicy Bypass -File scripts/check.ps1",
     "up:reset": "powershell -ExecutionPolicy Bypass -File scripts/reset-db.ps1",
-    "up:stop": "powershell -ExecutionPolicy Bypass -File scripts/stop-all.ps1"
+    "up:stop": "powershell -ExecutionPolicy Bypass -File scripts/stop-all.ps1",
+    "up:test": "powershell -ExecutionPolicy Bypass -File scripts/run-tests.ps1"
   },
   "devDependencies": {
     "husky": "^9.1.7",

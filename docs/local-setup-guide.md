@@ -77,6 +77,10 @@ Two issues exist in the canonical migration `001_initial_schema.sql` that need p
 
 Same issue: `::user_role` cast resolves to `auth.user_role` enum (does not exist). Fixed in `supabase/migrations/003_fix_handle_new_user.sql` to `::public.user_role`.
 
+### 5c. RLS policy recursion (circular table lookups)
+
+Several policies query across tables in a circle (e.g. `appointments` RLS → `patients` RLS → `appointments` RLS), which Postgres rejects with `infinite recursion detected`. Fixed in `supabase/migrations/004_fix_policy_recursion.sql` by routing every cross-table lookup through SECURITY DEFINER helpers (`public.user_doctor_patient_ids()`, `public.patient_exists(uuid)`, `public.user_patient_id()`, `public.user_doctor_id()`), which are opaque to the planner. This also makes the RLS test suite (`supabase/tests/rls_policies.sql`, 25 assertions) pass.
+
 If you applied the initial schema before these fixes, run them now:
 
 ```powershell
@@ -84,6 +88,9 @@ Get-Content supabase\migrations\002_fix_audit_trigger.sql -Raw |
   docker exec -i supabase_db_<project> psql -U postgres -d postgres
 
 Get-Content supabase\migrations\003_fix_handle_new_user.sql -Raw |
+  docker exec -i supabase_db_<project> psql -U postgres -d postgres
+
+Get-Content supabase\migrations\004_fix_policy_recursion.sql -Raw |
   docker exec -i supabase_db_<project> psql -U postgres -d postgres
 
 # Restart auth container to clear cached trigger plans

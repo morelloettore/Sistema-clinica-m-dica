@@ -582,6 +582,21 @@ RETURNS UUID AS $$
     SELECT id FROM doctors WHERE profile_id = auth.uid();
 $$ LANGUAGE sql SECURITY DEFINER STABLE;
 
+-- Opaque SECURITY DEFINER lookups so RLS policies never re-enter another
+-- table's policies (prevents "infinite recursion detected in policy").
+CREATE OR REPLACE FUNCTION public.user_doctor_patient_ids()
+RETURNS SETOF UUID AS $$
+    SELECT DISTINCT a.patient_id
+    FROM appointments a
+    JOIN doctors d ON d.id = a.doctor_id
+    WHERE d.profile_id = auth.uid();
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
+CREATE OR REPLACE FUNCTION public.patient_exists(p_patient_id UUID)
+RETURNS BOOLEAN AS $$
+    SELECT EXISTS (SELECT 1 FROM patients WHERE id = p_patient_id);
+$$ LANGUAGE sql SECURITY DEFINER STABLE;
+
 -- 6.2 Profiles policies
 CREATE POLICY "profiles_select_own"
     ON profiles FOR SELECT
@@ -626,10 +641,7 @@ CREATE POLICY "patients_select_doctor_own"
     ON patients FOR SELECT
     USING (
         public.user_role() = 'doctor'
-        AND id IN (
-            SELECT patient_id FROM appointments
-            WHERE doctor_id = public.user_doctor_id()
-        )
+        AND id IN (SELECT public.user_doctor_patient_ids())
     );
 
 CREATE POLICY "patients_update_own"
@@ -805,19 +817,11 @@ CREATE POLICY "schedules_delete_employee_admin"
 -- 6.12 Appointments policies
 CREATE POLICY "appointments_select_own"
     ON appointments FOR SELECT
-    USING (
-        patient_id IN (
-            SELECT id FROM patients WHERE profile_id = auth.uid()
-        )
-    );
+    USING (patient_id = public.user_patient_id());
 
 CREATE POLICY "appointments_select_doctor"
     ON appointments FOR SELECT
-    USING (
-        doctor_id IN (
-            SELECT id FROM doctors WHERE profile_id = auth.uid()
-        )
-    );
+    USING (doctor_id = public.user_doctor_id());
 
 CREATE POLICY "appointments_select_employee_admin"
     ON appointments FOR SELECT
@@ -826,44 +830,26 @@ CREATE POLICY "appointments_select_employee_admin"
 CREATE POLICY "appointments_insert_own"
     ON appointments FOR INSERT
     WITH CHECK (
-        patient_id IN (
-            SELECT id FROM patients WHERE profile_id = auth.uid()
-        )
-        AND public.user_role() = 'patient'
+        public.user_role() = 'patient'
+        AND patient_id = public.user_patient_id()
     );
 
 CREATE POLICY "appointments_insert_employee"
     ON appointments FOR INSERT
     WITH CHECK (
         public.user_role() = 'employee'
-        AND patient_id IN (SELECT id FROM patients)
+        AND public.patient_exists(patient_id)
     );
 
 CREATE POLICY "appointments_update_own"
     ON appointments FOR UPDATE
-    USING (
-        patient_id IN (
-            SELECT id FROM patients WHERE profile_id = auth.uid()
-        )
-    )
-    WITH CHECK (
-        patient_id IN (
-            SELECT id FROM patients WHERE profile_id = auth.uid()
-        )
-    );
+    USING (patient_id = public.user_patient_id())
+    WITH CHECK (patient_id = public.user_patient_id());
 
 CREATE POLICY "appointments_update_doctor"
     ON appointments FOR UPDATE
-    USING (
-        doctor_id IN (
-            SELECT id FROM doctors WHERE profile_id = auth.uid()
-        )
-    )
-    WITH CHECK (
-        doctor_id IN (
-            SELECT id FROM doctors WHERE profile_id = auth.uid()
-        )
-    );
+    USING (doctor_id = public.user_doctor_id())
+    WITH CHECK (doctor_id = public.user_doctor_id());
 
 CREATE POLICY "appointments_update_employee_admin"
     ON appointments FOR UPDATE
@@ -879,23 +865,16 @@ CREATE POLICY "medical_records_select_own"
     ON medical_records FOR SELECT
     USING (
         is_deleted = false
-        AND patient_id IN (
-            SELECT id FROM patients WHERE profile_id = auth.uid()
-        )
+        AND patient_id = public.user_patient_id()
     );
 
 CREATE POLICY "medical_records_select_doctor"
     ON medical_records FOR SELECT
     USING (
         is_deleted = false
-        AND doctor_id IN (
-            SELECT id FROM doctors WHERE profile_id = auth.uid()
-        )
+        AND doctor_id = public.user_doctor_id()
         AND (
-            patient_id IN (
-                SELECT patient_id FROM appointments
-                WHERE doctor_id = (SELECT id FROM doctors WHERE profile_id = auth.uid())
-            )
+            patient_id IN (SELECT public.user_doctor_patient_ids())
             OR created_by = auth.uid()
         )
     );
@@ -916,16 +895,8 @@ CREATE POLICY "medical_records_insert_doctor"
 
 CREATE POLICY "medical_records_update_doctor"
     ON medical_records FOR UPDATE
-    USING (
-        doctor_id IN (
-            SELECT id FROM doctors WHERE profile_id = auth.uid()
-        )
-    )
-    WITH CHECK (
-        doctor_id IN (
-            SELECT id FROM doctors WHERE profile_id = auth.uid()
-        )
-    );
+    USING (doctor_id = public.user_doctor_id())
+    WITH CHECK (doctor_id = public.user_doctor_id());
 
 CREATE POLICY "medical_records_delete_admin"
     ON medical_records FOR DELETE

@@ -125,7 +125,7 @@ BEGIN
   UPDATE appointments SET status = 'cancelled' WHERE id = v_appointment_id;
 
   SELECT available_slots INTO v_after_slots FROM schedules WHERE id = v_schedule_id;
-  PERFORM test.assert(v_after_slots = 3, 'slot incremented to 3 after cancellation');
+  PERFORM test.assert(v_after_slots = 2, 'slot restored to 2 (pre-booking value) after cancellation');
 
   DELETE FROM appointments WHERE schedule_id = v_schedule_id;
   DELETE FROM schedules WHERE id = v_schedule_id;

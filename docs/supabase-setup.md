@@ -199,7 +199,14 @@ Get-Content supabase/migrations/003_fix_handle_new_user.sql -Raw |
   docker exec -i supabase_db_<project> psql -U postgres -d postgres
 ```
 
-> These two fixes are bundled in the migration files 002/003 so that subsequent `supabase db reset` re-applies them cleanly. If you skip them, all auth operations fail with `type "user_role" does not exist`.
+**Fix C — RLS policy recursion (circular cross-table lookups)**
+
+```powershell
+Get-Content supabase/migrations/004_fix_policy_recursion.sql -Raw |
+  docker exec -i supabase_db_<project> psql -U postgres -d postgres
+```
+
+> These fixes are bundled in the migration files 002/003/004 so that subsequent `supabase db reset` re-applies them cleanly. If you skip them, all auth operations fail with `type "user_role" does not exist` (Fix B) or `infinite recursion detected in policy for relation` (Fix C).
 
 ### 4. Seed Demo Data
 

@@ -1,7 +1,7 @@
 # scripts/reset-db.ps1
 # Destructive full reset of the LOCAL supabase stack:
 #   supabase stop --no-backup  ->  supabase start  ->  (re)apply migrations + seed
-# All data is wiped and re-created from migrations 001-003 + seed.sql.
+# All data is wiped and re-created from migrations 001-004 + seed.sql.
 #
 # Usage:  powershell -ExecutionPolicy Bypass -File scripts/reset-db.ps1 [-SkipFixes] [-SkipProbe]
 
@@ -41,7 +41,7 @@ try { & cmd.exe /d /c "call `"$supabase`" stop --no-backup 1>nul 2>&1" } catch {
 Pop-Location
 
 # 3. Restart (re-applies migrations)
-Write-Host '[3/4] Restarting Supabase (re-applies migrations 001-003)...' -ForegroundColor Cyan
+Write-Host '[3/4] Restarting Supabase (re-applies migrations 001-004)...' -ForegroundColor Cyan
 $startLog = Join-Path $env:TEMP 'supabase-reset-start.log'
 Remove-Item $startLog -ErrorAction SilentlyContinue
 Push-Location $root

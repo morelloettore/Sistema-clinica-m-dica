@@ -99,7 +99,8 @@ Write-Host '' -ForegroundColor Cyan
 Write-Host '[4/6] Applying schema fixes + seed...' -ForegroundColor Cyan
 $fixes = @(
     (Join-Path $root 'supabase\migrations\002_fix_audit_trigger.sql'),
-    (Join-Path $root 'supabase\migrations\003_fix_handle_new_user.sql')
+    (Join-Path $root 'supabase\migrations\003_fix_handle_new_user.sql'),
+    (Join-Path $root 'supabase\migrations\004_fix_policy_recursion.sql')
 )
 $container = Get-SupabaseDbContainer
 foreach ($f in $fixes) {

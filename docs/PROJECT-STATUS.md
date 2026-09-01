@@ -8,12 +8,12 @@
 
 ## Verification Results
 
-| Check | Command | Result |
-|-------|---------|--------|
-| Lint (both packages) | `pnpm lint` | ✅ PASS (0 errors; warnings only) |
-| Typecheck | `pnpm typecheck` | ✅ PASS |
-| Unit/Integration tests | `pnpm test` | ✅ PASS — 174/174 (9 files) |
-| Production build | `pnpm build` | ✅ PASS |
+| Check                  | Command          | Result                            |
+| ---------------------- | ---------------- | --------------------------------- |
+| Lint (both packages)   | `pnpm lint`      | ✅ PASS (0 errors; warnings only) |
+| Typecheck              | `pnpm typecheck` | ✅ PASS                           |
+| Unit/Integration tests | `pnpm test`      | ✅ PASS — 174/174 (9 files)       |
+| Production build       | `pnpm build`     | ✅ PASS                           |
 
 ---
 
@@ -26,8 +26,10 @@ Turborepo + pnpm monorepo: `apps/web` (Vue 3 + Vite SPA) + `packages/shared` (Zo
 `supabase/migrations/001_initial_schema.sql`: 13 tables, 5 enums, 34 indexes, triggers, audit trail, full RLS (62+ policies), seed data. Key invariants: `profiles.id → auth.users.id` (users created via `auth.signUp()`), `appointment_status` (7 values), clinical `medical_records` columns, exclusion constraint for schedule overlap.
 
 Schema fixes applied and committed after initial migration:
+
 - `supabase/migrations/002_fix_audit_trigger.sql` — qualifies trigger enum/table refs
 - `supabase/migrations/003_fix_handle_new_user.sql` — fixes `handle_new_user` trigger; adds IMMUTABLE `schedule_to_ts` function
+- `supabase/migrations/004_fix_policy_recursion.sql` — routes circular cross-table RLS lookups through SECURITY DEFINER helpers (fixes `infinite recursion detected`); required for `rls_policies.sql` (25 assertions) to pass
 - `supabase/seed.sql` — idempotent seed data for all 4 demo users
 
 ## Backend — PASS
@@ -44,12 +46,12 @@ Supabase Auth (`signUp`/`signIn`), JWT, role-guarded routes, `auth.user_role()` 
 
 All 4 demo users verified against local Supabase (`http://127.0.0.1:54321`):
 
-| User | Email | Password |
-|------|-------|----------|
-| Admin | admin@clinica.local | admin123456 |
-| Doctor | doctor@clinica.local | doctor123456 |
+| User     | Email                  | Password       |
+| -------- | ---------------------- | -------------- |
+| Admin    | admin@clinica.local    | admin123456    |
+| Doctor   | doctor@clinica.local   | doctor123456   |
 | Employee | employee@clinica.local | employee123456 |
-| Patient | patient@clinica.local | patient123456 |
+| Patient  | patient@clinica.local  | patient123456  |
 
 ## RLS / Security — PASS (post-remediation)
 
