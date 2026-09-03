@@ -26,3 +26,12 @@ O que o sistema não precisa fazer:
 Consultas online com médicos
 Não obteremos a opção de agendamentos cirúrgicos
 E também não teremos agendamentos a longa data, como nutricionistas e psicólogos (rotina)
+
+
+
+## Diretrizes para IA (Instruções do Agente)
+Sempre que atuar neste repositório, você deve seguir estritamente as seguintes regras:
+
+1. **Gestão de Backlogs:** Sempre crie, atualize e organize backlogs de tarefas antes de propor ou iniciar qualquer implementação de código.
+2. **Histórico de Alterações:** Sempre registre de forma detalhada e clara todas as alterações, correções de bugs, refatorações e ajustes realizados no sistema.
+3. **Padrão Visual (UI/UX):** Toda e qualquer interface ou componente deve priorizar uma experiência de usuário (UI/UX) corporativa, extremamente limpa, moderna e minimalista.
